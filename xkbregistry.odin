@@ -92,18 +92,13 @@ Rxkb_Popularity :: enum u32 {
 	EXOTIC   = 2,
 }
 
-/**
-* Flags for context creation.
-*/
-Rxkb_Context_Flags :: enum u32 {
-	NO_FLAGS            = 0,
-
+Rxkb_Context_Flag :: enum u32 {
 	/**
 	* Skip the default include paths. This requires the caller to call
 	* `rxkb_context_include_path_append()` or
 	* `rxkb_context_include_path_append_default()`.
 	*/
-	NO_DEFAULT_INCLUDES = 1,
+	NO_DEFAULT_INCLUDES = 0,
 
 	/**
 	* Load the extra items that are considered too exotic for the default list.
@@ -114,7 +109,7 @@ Rxkb_Context_Flags :: enum u32 {
 	* in the include paths, see `rxkb_context_include_path_append()` for
 	* details on the lookup behavior.
 	*/
-	LOAD_EXOTIC_RULES   = 2,
+	LOAD_EXOTIC_RULES   = 1,
 
 	/**
 	* Disable the use of `secure_getenv()` for this context, so that privileged
@@ -122,8 +117,13 @@ Rxkb_Context_Flags :: enum u32 {
 	*
 	* @since 1.5.0
 	*/
-	NO_SECURE_GETENV    = 4,
+	NO_SECURE_GETENV    = 2,
 }
+
+/**
+* Flags for context creation.
+*/
+Rxkb_Context_Flags :: bit_set[Rxkb_Context_Flag; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {

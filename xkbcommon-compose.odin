@@ -27,16 +27,16 @@ Compose_Table :: struct {}
 */
 Compose_State :: struct {}
 
-/** Flags affecting Compose file compilation. */
-Compose_Compile_Flags :: enum u32 {
-	/** Do not apply any flags. */
-	XKB_COMPOSE_COMPILE_NO_FLAGS = 0,
+Compose_Compile_Flag :: enum u32 {
 }
+
+/** Flags affecting Compose file compilation. */
+Compose_Compile_Flags :: bit_set[Compose_Compile_Flag; i32]
 
 /** The recognized Compose file formats. */
 Compose_Format :: enum u32 {
 	/** The classic libX11 Compose text format, described in Compose(5). */
-	XKB_COMPOSE_FORMAT_TEXT_V1 = 1,
+	TEXT_V1 = 1,
 }
 
 @(default_calling_convention="c", link_prefix="xkb_")
@@ -272,8 +272,6 @@ foreign lib {
 
 /** Flags for compose state creation. */
 Compose_State_Flags :: enum u32 {
-	/** Do not apply any flags. */
-	XKB_COMPOSE_STATE_NO_FLAGS = 0,
 }
 
 @(default_calling_convention="c", link_prefix="xkb_")

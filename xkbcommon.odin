@@ -260,9 +260,10 @@ KEYSYM_MAX      :: 0x1fffffff
 */
 Rmlvo_Builder :: struct {}
 
-Rmlvo_Builder_Flags :: enum u32 {
-	XKB_RMLVO_BUILDER_NO_FLAGS = 0,
+Rmlvo_Builder_Flag :: enum u32 {
 }
+
+Rmlvo_Builder_Flags :: bit_set[Rmlvo_Builder_Flag; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -522,14 +523,13 @@ foreign lib {
 	keysym_get_name :: proc(keysym: Keysym, buffer: cstring, size: c.size_t) -> i32 ---
 }
 
-/** Flags for xkb_keysym_from_name(). */
-Keysym_Flags :: enum u32 {
-	/** Do not apply any flags. */
-	NO_FLAGS         = 0,
-
+Keysym_Flag :: enum u32 {
 	/** Find keysym by case-insensitive search. */
-	CASE_INSENSITIVE = 1,
+	CASE_INSENSITIVE = 0,
 }
+
+/** Flags for xkb_keysym_from_name(). */
+Keysym_Flags :: bit_set[Keysym_Flag; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -654,11 +654,7 @@ foreign lib {
 	keysym_to_lower :: proc(ks: Keysym) -> Keysym ---
 }
 
-/** Flags for context creation. */
-Context_Flags :: enum u32 {
-	/** Do not apply any context flags. */
-	FLAGS             = 0,
-
+Context_Flag :: enum u32 {
 	/**
 	* Create this context with an empty include path.
 	*
@@ -668,14 +664,14 @@ Context_Flags :: enum u32 {
 	*   if only retrieving keymap from the Wayland or X server. It avoids
 	*   potential issues with directory access permissions.
 	*/
-	DEFAULT_INCLUDES  = 1,
+	NO_DEFAULT_INCLUDES  = 0,
 
 	/**
 	* Don’t take RMLVO names from the environment.
 	*
 	* @since 0.3.0
 	*/
-	ENVIRONMENT_NAMES = 2,
+	NO_ENVIRONMENT_NAMES = 1,
 
 	/**
 	* Disable the use of secure_getenv for this context, so that privileged
@@ -683,8 +679,11 @@ Context_Flags :: enum u32 {
 	*
 	* @since 1.5.0
 	*/
-	SECURE_GETENV     = 4,
+	NO_SECURE_GETENV     = 2,
 }
+
+/** Flags for context creation. */
+Context_Flags :: bit_set[Context_Flag; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -880,11 +879,11 @@ foreign lib {
 	context_set_log_fn :: proc(_context: ^Context, log_fn: proc "c" (_context: ^Context, level: Log_Level, format: cstring, args: c.va_list)) ---
 }
 
-/** Flags for keymap compilation. */
-Keymap_Compile_Flags :: enum u32 {
-	/** Do not apply any flags. */
-	XKB_KEYMAP_COMPILE_NO_FLAGS = 0,
+Keymap_Compile_Flag :: enum u32 {
 }
+
+/** Flags for keymap compilation. */
+Keymap_Compile_Flags :: bit_set[Keymap_Compile_Flag; i32]
 
 /**
 * The possible keymap formats.
@@ -1129,21 +1128,20 @@ foreign lib {
 	keymap_unref :: proc(keymap: ^Keymap) ---
 }
 
+Keymap_Serialize_Flag :: enum u32 {
+	/** Enable pretty-printing */
+	PRETTY      = 0,
+
+	/** Do not drop unused bits (key types, compatibility entries) */
+	KEEP_UNUSED = 1,
+}
+
 /**
 * Flags to control keymap serialization.
 *
 * @since 1.12.0
 */
-Keymap_Serialize_Flags :: enum u32 {
-	/** Do not apply any flags. */
-	NO_FLAGS    = 0,
-
-	/** Enable pretty-printing */
-	PRETTY      = 1,
-
-	/** Do not drop unused bits (key types, compatibility entries) */
-	KEEP_UNUSED = 2,
-}
+Keymap_Serialize_Flags :: bit_set[Keymap_Serialize_Flag; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -1550,6 +1548,43 @@ Key_Direction :: enum u32 {
 	DOWN = 1, /**< The key was pressed. */
 }
 
+State_Component_Bit :: enum u32 {
+	/** Depressed modifiers, i.e. a key is physically holding them. */
+	MODS_DEPRESSED   = 0,
+
+	/** Latched modifiers, i.e. will be unset after the next non-modifier
+	*  key press. */
+	MODS_LATCHED     = 1,
+
+	/** Locked modifiers, i.e. will be unset after the key provoking the
+	*  lock has been pressed again. */
+	MODS_LOCKED      = 2,
+
+	/** Effective modifiers, i.e. currently active and affect key
+	*  processing (derived from the other state components).
+	*  Use this unless you explicitly care how the state came about. */
+	MODS_EFFECTIVE   = 3,
+
+	/** Depressed layout, i.e. a key is physically holding it. */
+	LAYOUT_DEPRESSED = 4,
+
+	/** Latched layout, i.e. will be unset after the next non-modifier
+	*  key press. */
+	LAYOUT_LATCHED   = 5,
+
+	/** Locked layout, i.e. will be unset after the key provoking the lock
+	*  has been pressed again. */
+	LAYOUT_LOCKED    = 6,
+
+	/** Effective layout, i.e. currently active and affects key processing
+	*  (derived from the other state components).
+	*  Use this unless you explicitly care how the state came about. */
+	LAYOUT_EFFECTIVE = 7,
+
+	/** LEDs (derived from the other state components). */
+	LEDS             = 8,
+}
+
 /**
 * Modifier and layout types for state objects.  This enum is bitmaskable,
 * e.g. (`::XKB_STATE_MODS_DEPRESSED` | `::XKB_STATE_MODS_LATCHED`) is valid to
@@ -1557,42 +1592,7 @@ Key_Direction :: enum u32 {
 *
 * In XKB, the `DEPRESSED` components are also known as *base*.
 */
-State_Component :: enum u32 {
-	/** Depressed modifiers, i.e. a key is physically holding them. */
-	MODS_DEPRESSED   = 1,
-
-	/** Latched modifiers, i.e. will be unset after the next non-modifier
-	*  key press. */
-	MODS_LATCHED     = 2,
-
-	/** Locked modifiers, i.e. will be unset after the key provoking the
-	*  lock has been pressed again. */
-	MODS_LOCKED      = 4,
-
-	/** Effective modifiers, i.e. currently active and affect key
-	*  processing (derived from the other state components).
-	*  Use this unless you explicitly care how the state came about. */
-	MODS_EFFECTIVE   = 8,
-
-	/** Depressed layout, i.e. a key is physically holding it. */
-	LAYOUT_DEPRESSED = 16,
-
-	/** Latched layout, i.e. will be unset after the next non-modifier
-	*  key press. */
-	LAYOUT_LATCHED   = 32,
-
-	/** Locked layout, i.e. will be unset after the key provoking the lock
-	*  has been pressed again. */
-	LAYOUT_LOCKED    = 64,
-
-	/** Effective layout, i.e. currently active and affects key processing
-	*  (derived from the other state components).
-	*  Use this unless you explicitly care how the state came about. */
-	LAYOUT_EFFECTIVE = 128,
-
-	/** LEDs (derived from the other state components). */
-	LEDS             = 256,
-}
+State_Component :: bit_set[State_Component_Bit; i32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
