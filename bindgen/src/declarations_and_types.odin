@@ -59,6 +59,9 @@ Decl :: struct {
 
 	original_line: int,
 
+	// When original line is the same, use this to break the tie
+	original_line_sort_tie_breaker: int,
+
 	explicitly_created: bool,
 
 	// Only used for macros.
@@ -126,6 +129,7 @@ Type_Struct_Field :: struct {
 Type_Struct :: struct {
 	fields: []Type_Struct_Field,
 	raw_union: bool,
+	align: int,
 }
 
 Type_Enum_Member :: struct {
@@ -138,7 +142,7 @@ Type_Enum_Member :: struct {
 Type_Enum :: struct {
 	// the `u32` in `My_Enum :: enum u32 {}`
 	storage_type: typeid,
-	members: []Type_Enum_Member,
+	members: [dynamic]Type_Enum_Member, // dynamic so we can construct enums from macros
 }
 
 Type_Unknown :: struct {}
@@ -167,6 +171,7 @@ Type_Fixed_Array :: struct {
 Type_Procedure_Parameter :: struct {
 	name: string,
 	type: Definition,
+	comment: string,
 	default: string,
 	any_int: bool,
 }

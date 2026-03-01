@@ -263,7 +263,7 @@ Rmlvo_Builder :: struct {}
 Rmlvo_Builder_Flag :: enum u32 {
 }
 
-Rmlvo_Builder_Flags :: bit_set[Rmlvo_Builder_Flag; i32]
+Rmlvo_Builder_Flags :: bit_set[Rmlvo_Builder_Flag; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -529,7 +529,7 @@ Keysym_Flag :: enum u32 {
 }
 
 /** Flags for xkb_keysym_from_name(). */
-Keysym_Flags :: bit_set[Keysym_Flag; i32]
+Keysym_Flags :: bit_set[Keysym_Flag; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -683,7 +683,7 @@ Context_Flag :: enum u32 {
 }
 
 /** Flags for context creation. */
-Context_Flags :: bit_set[Context_Flag; i32]
+Context_Flags :: bit_set[Context_Flag; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -883,7 +883,7 @@ Keymap_Compile_Flag :: enum u32 {
 }
 
 /** Flags for keymap compilation. */
-Keymap_Compile_Flags :: bit_set[Keymap_Compile_Flag; i32]
+Keymap_Compile_Flags :: bit_set[Keymap_Compile_Flag; u32]
 
 /**
 * The possible keymap formats.
@@ -1141,7 +1141,7 @@ Keymap_Serialize_Flag :: enum u32 {
 *
 * @since 1.12.0
 */
-Keymap_Serialize_Flags :: bit_set[Keymap_Serialize_Flag; i32]
+Keymap_Serialize_Flags :: bit_set[Keymap_Serialize_Flag; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {
@@ -1592,7 +1592,7 @@ State_Component_Bit :: enum u32 {
 *
 * In XKB, the `DEPRESSED` components are also known as *base*.
 */
-State_Component :: bit_set[State_Component_Bit; i32]
+State_Component :: bit_set[State_Component_Bit; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {

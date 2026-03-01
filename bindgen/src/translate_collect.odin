@@ -130,6 +130,20 @@ translate_collect :: proc(filename: string, config: Config, types: Type_List, de
 		decls = decls,
 	}
 
+	// Add empty enum defs for macro enumification
+	for prefix, enum_name in config.enumify_macros {
+		type_idx := add_type(types, Type_Enum {
+			storage_type = int,
+		})
+		tcs.macro_prefix_to_enum_decl[prefix] = len(decls)
+		add_decl(decls, {
+			name = enum_name,
+			def = type_idx,
+			invalid = true, // We will set this to false later if we find a valid macro
+			explicitly_created = true,
+		})
+	}
+
 	// I dislike visitors. They make the code hard to read. So I build a map of all parents and
 	// children. That way we can use this lookup to find arrays of children and iterate them normally.
 	//
@@ -146,7 +160,7 @@ translate_collect :: proc(filename: string, config: Config, types: Type_List, de
 			continue
 		}
 
-		create_declaration(c, &tcs)
+		create_declaration(c, &tcs, config)
 	}
 
 	extra_imports, extra_imports_err := slice.map_keys(tcs.extra_imports)
@@ -170,6 +184,7 @@ Translate_Collect_State :: struct {
 	source: string,
 	extra_imports: map[string]bool,
 	macros: [dynamic]Raw_Macro,
+	macro_prefix_to_enum_decl: map[string]int,
 	translation_unit: clang.Translation_Unit,
 }
 
@@ -203,7 +218,7 @@ build_cursor_children_lookup :: proc(c: clang.Cursor, res: ^Cursor_Children_Map)
 
 // Finds things such as procs and struct declarations and stores them in `tcs.decls`. Recursive.
 // Also runs `create_type_recursive` which will fill out `tcs.types`.
-create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State) {
+create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State, config: Config) {
 	name := get_cursor_name(c)
 	comment_before := string_from_clang_string(clang.Cursor_getRawCommentText(c))
 	line := get_cursor_location(c).line
@@ -221,10 +236,17 @@ create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State) {
 		start := clang.getRangeStart(source_range)
 		start_offset: u32
 		clang.getExpansionLocation(start, nil, nil, nil, &start_offset)
-		end := clang.getRangeEnd(source_range)
-		end_offset: u32
-		clang.getExpansionLocation(end, nil, nil, nil, &end_offset)
-		side_comment, side_comment_align_whitespace = find_comment_at_line_end(tcs.source[start_offset:])
+		
+		// Function params can have comments which causes find_comment_at_line_end
+		// to return the wrong comment so we find the end of the fn first.
+		if c.kind == .FunctionDecl {
+			for ; int(start_offset) < len(tcs.source); start_offset += 1 {
+				if tcs.source[start_offset] == ';' {
+					break
+				}
+			}
+		}
+		side_comment, side_comment_align_whitespace, _ = find_next_comment(tcs.source[start_offset:])
 	}
 
 	ct := clang.getCursorType(c)
@@ -254,7 +276,7 @@ create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State) {
 		children := tcs.children_lookup[c]
 
 		for cc in children {
-			create_declaration(cc, tcs)
+			create_declaration(cc, tcs, config)
 		}
 
 	case .TypedefDecl:
@@ -285,19 +307,23 @@ create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State) {
 		if clang.Cursor_isAnonymous(c) == 1 {
 			e, is_enum := tcs.types[ti].(Type_Enum)
 
-			if is_enum {
-				for &m in e.members {
-					add_decl(tcs.decls, {
-						name = m.name,
-						def = Fixed_Value(fmt.tprint(m.value)),
-						original_line = line,
+			new_name, exists := config.deanon_enums[e.members[0].name]
+			if !exists {
+				if is_enum {
+					for &m in e.members {
+						add_decl(tcs.decls, {
+							name = m.name,
+							def = Fixed_Value(fmt.tprint(m.value)),
+							original_line = line,
 
-						// It's not really from a macro, but it's probably best if it behaves as if.
-						from_macro = true,
-					})
+							// It's not really from a macro, but it's probably best if it behaves as if.
+							from_macro = true,
+						})
+					}
 				}
+				return
 			}
-			return
+			name = new_name
 		}
 
 		add_decl(tcs.decls, {
@@ -387,6 +413,28 @@ create_declaration :: proc(c: clang.Cursor, tcs: ^Translate_Collect_State) {
 				tokens[i - 1] = {
 					value = val,
 					kind = kind,
+				}
+			}
+
+			if len(tokens) == 1 && tokens[0].kind == .Literal {
+				for prefix, decl_idx in tcs.macro_prefix_to_enum_decl {
+					if strings.has_prefix(name, prefix) {
+						int_value, ok := strconv.parse_int(tokens[0].value)
+						if ok {
+							d := &tcs.decls[decl_idx]
+							if d.invalid {
+								d.original_line = line
+								d.invalid = false
+							}
+							append(&(&tcs.types[d.def.(Type_Index)].(Type_Enum)).members, Type_Enum_Member {
+								name = name,
+								value = int_value,
+								comment_before = comment,
+								comment_on_right = side_comment,
+							})
+							return
+						}
+					}
 				}
 			}
 
@@ -483,9 +531,16 @@ find_comment_before :: proc(src: string, start_rune: rune, start_offset: int) ->
 	return ""
 }
 
-find_comment_at_line_end :: proc(str: string) -> (string, int) {
+Comment_Type :: enum {
+	Line,
+	Block,
+}
+
+// delimiters is a bit of a hack to get this to work for proc params.
+// without it this function will return e.g. param 3's comment for param 1.
+find_next_comment :: proc(str: string, delimiters: map[rune]struct{} = {}) -> (string, int, Comment_Type) {
 	space_before_comment: int
-	comment_start: int
+	comment_start: int = -1
 	block_comment: bool
 
 	for c, i in str {
@@ -498,15 +553,15 @@ find_comment_at_line_end :: proc(str: string) -> (string, int) {
 			comment_start = i
 			block_comment = true
 			break
-		} else if c == '\n' {
+		} else if c == '\n' || c in delimiters {
 			break
 		} else {
 			space_before_comment = 0
 		}
 	}
 
-	if comment_start == 0 {
-		return "", 0
+	if comment_start == -1 {
+		return "", 0, .Line
 	}
 
 	if block_comment {
@@ -514,7 +569,7 @@ find_comment_at_line_end :: proc(str: string) -> (string, int) {
 
 		for c, i in from_start {
 			if c == '*' && i < len(from_start) - 1 && from_start[i + 1] == '/' {
-				return from_start[:i+2], space_before_comment
+				return from_start[:i+2], space_before_comment, .Block
 			}
 		}
 	} else {
@@ -522,12 +577,12 @@ find_comment_at_line_end :: proc(str: string) -> (string, int) {
 
 		for c, i in from_start {
 			if c == '\n' {
-				return from_start[:i], space_before_comment
+				return from_start[:i], space_before_comment, .Line
 			}
 		}
 	}
 
-	return "", 0
+	return "", 0, .Line
 }
 
 type_probably_is_cstring :: proc(ct: clang.Type) -> bool {
@@ -687,9 +742,16 @@ create_proc_type :: proc(param_childs: []clang.Cursor, ct: clang.Type, tcs: ^Tra
 				}
 			}
 
+			range := clang.Cursor_getSpellingNameRange(child, 0, 0)
+			range_start := clang.getRangeStart(range)
+			offset_start: u32
+			clang.getSpellingLocation(range_start, nil, nil, nil, &offset_start)
+			comment, _, type := find_next_comment(tcs.source[offset_start:], {',' = {}})
+
 			append(&params, Type_Procedure_Parameter {
 				name = name,
 				type = type_id,
+				comment = type == .Block ? comment : "", // Line comments cause issues so don't accept them
 			})
 		}
 	} else {
@@ -850,7 +912,7 @@ create_type_recursive :: proc(ct: clang.Type, tcs: ^Translate_Collect_State) -> 
 				field_loc := get_cursor_location(sc)
 
 				comment_before := find_comment_before(tcs.source, '\n', field_loc.offset)
-				comment_on_right, _ := find_comment_at_line_end(tcs.source[field_loc.offset:])
+				comment_on_right, _, _ := find_next_comment(tcs.source[field_loc.offset:])
 
 				if prev_named_field >= 0 && prev_named_field == len(fields) - 1 &&
 				fields[prev_named_field].type == type_id && field_loc.line == fields[prev_named_field].line {
@@ -921,7 +983,7 @@ create_type_recursive :: proc(ct: clang.Type, tcs: ^Translate_Collect_State) -> 
 			cursor_loc := get_cursor_location(ec)
 
 			comment_before := find_comment_before(tcs.source, '\n', cursor_loc.offset)
-			comment_on_right, _ := find_comment_at_line_end(tcs.source[cursor_loc.offset:])
+			comment_on_right, _, _ := find_next_comment(tcs.source[cursor_loc.offset:])
 
 			append(&members, Type_Enum_Member {
 				name = member_name,
@@ -970,7 +1032,7 @@ create_type_recursive :: proc(ct: clang.Type, tcs: ^Translate_Collect_State) -> 
 
 		type_definition := Type_Enum {
 			storage_type = storage_type,
-			members = members[:],
+			members = members,
 		}
 
 		tcs.types[enum_type_idx] = type_definition

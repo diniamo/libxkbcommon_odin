@@ -58,6 +58,9 @@ Config :: struct {
 	// Put these tags on the specified struct field
 	struct_field_tags: map[string]string,
 
+	// Adds #align(number) to the outputted struct
+	struct_align: map[string]int,
+
 	// Remove a specific enum member. Write the C name of the member. You can also use wildcards
 	// such as *_Count
 	remove_enum_members: []string,
@@ -82,6 +85,12 @@ Config :: struct {
 
 	// Put the names of declarations in here to remove them.	
 	remove: []string,
+
+	// Used to deanonymize an enum.
+	deanon_enums: map[string]string,
+
+	// Group all macros with a prefix into an enum.
+	enumify_macros: map[string]string,
 
 	// Group all procedures at the end of the file.
 	procedures_at_end: bool,

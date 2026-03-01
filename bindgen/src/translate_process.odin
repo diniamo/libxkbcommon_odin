@@ -96,9 +96,6 @@ translate_process :: proc(tcr: Translate_Collect_Result, config: Config, types: 
 		}
 	}
 
-	// Declared here to reuse.
-	bit_set_make_constant: map[string]int
-
 	for &d, i in decls {
 		if i == 0 {
 			d.invalid = true
@@ -175,10 +172,10 @@ translate_process :: proc(tcr: Translate_Collect_Result, config: Config, types: 
 					append(&new_members, new_m)
 				}
 
-				v.members = new_members[:]
+				v.members = new_members
 			}
 
-			if automatically_strip_member_prefixes && !d.explicitly_created {
+			if automatically_strip_member_prefixes {
 				strip_enum_member_prefixes(&v)
 			}
 
@@ -192,8 +189,6 @@ translate_process :: proc(tcr: Translate_Collect_Result, config: Config, types: 
 			bit_set_enum_name, bit_setify := config.bit_setify[d.name]
 
 			if bit_setify {
-				clear(&bit_set_make_constant)
-
 				bs_idx := add_type(types, Type_Bit_Set {
 					enum_type = d.def.(Type_Index),
 					enum_decl_name = Type_Name(bit_set_enum_name),
@@ -207,51 +202,60 @@ translate_process :: proc(tcr: Translate_Collect_Result, config: Config, types: 
 						continue
 					}
 
-					if bits.count_ones(m.value) != 1 {
-						// Not a power of two, so not part of a bit_set. Save it for later for making
-						// it into a constant.
-						bs_constant_idx := add_type(types, Type_Bit_Set_Constant {
-							bit_set_type = bs_idx,
-							bit_set_type_name = Type_Name(d.name),
-							value = m.value,
+					if bits.count_ones(m.value) == 1 {
+						append(&new_members, Type_Enum_Member {
+							name = m.name,
+							value = int(bits.log2(uint(m.value))), // use transmute incase m.value == min(i64)
+							comment_before = m.comment_before,
+							comment_on_right = m.comment_on_right,
 						})
-
-						name := m.name
-
-						if len(original_member_names) == len(v.members) {
-							name = original_member_names[m_idx]
-						}
-
-						constant_name := strings.to_screaming_snake_case(strings.trim_prefix(strings.to_lower(name), strings.to_lower(config.remove_type_prefix)))
-
-						add_decl(decls, {
-							original_line = d.original_line + 2,
-							name = constant_name,
-							def = bs_constant_idx,
-							explicitly_created = true,
+						continue
+					} else if v.storage_type == i32 && m.value == bits.I32_MIN {
+						// If the type is i32 then a value of min(i32) would be the most significant bit.
+						// The i64 case shouldn't be necessary as that should return bits.count_ones = 1
+						append(&new_members, Type_Enum_Member {
+							name = m.name,
+							value = 31,
+							comment_before = m.comment_before,
+							comment_on_right = m.comment_on_right,
 						})
-
 						continue
 					}
 
-					append(&new_members, Type_Enum_Member {
-						name = m.name,
-						value = int(bits.log2(uint(m.value))),
-						comment_before = m.comment_before,
-						comment_on_right = m.comment_on_right,
+					// Not a power of two, so not part of a bit_set. Save it for later for making
+					// it into a constant.
+					bs_constant_idx := add_type(types, Type_Bit_Set_Constant {
+						bit_set_type = bs_idx,
+						bit_set_type_name = Type_Name(d.name),
+						value = m.value,
+					})
+
+					name := m.name
+
+					if len(original_member_names) == len(v.members) {
+						name = original_member_names[m_idx]
+					}
+
+					constant_name := strings.to_screaming_snake_case(strings.trim_prefix(strings.to_lower(name), strings.to_lower(config.remove_type_prefix)))
+
+					add_decl(decls, {
+						original_line = d.original_line + 2,
+						original_line_sort_tie_breaker = m_idx,
+						name = constant_name,
+						def = bs_constant_idx,
+						explicitly_created = true,
 					})
 				}
 
-				v.members = new_members[:]
+				v.members = new_members
 
 				enum_decl := d
-				enum_decl.name = bit_set_enum_name
 				enum_decl.comment_before = ""
 				enum_decl.side_comment = ""
-				enum_decl.explicitly_created = true
-
 				d.def = bs_idx
 				d.original_line += 1
+
+				enum_decl.name = bit_set_enum_name
 
 				add_decl(decls, enum_decl)
 			}
@@ -292,10 +296,18 @@ translate_process :: proc(tcr: Translate_Collect_Result, config: Config, types: 
 				return j_is_proc
 			}
 
+			if i.original_line == j.original_line {
+				return i.original_line_sort_tie_breaker < j.original_line_sort_tie_breaker
+			}
+
 			return i.original_line < j.original_line
 		})
 	} else {
 		slice.sort_by(decls[:], proc(i, j: Decl) -> bool {
+			if i.original_line == j.original_line {
+				return i.original_line_sort_tie_breaker < j.original_line_sort_tie_breaker
+			}
+
 			return i.original_line < j.original_line
 		})
 	}
@@ -488,6 +500,10 @@ resolve_final_names :: proc(types: Type_List, decls: Decl_List, config: Config) 
 }
 
 override_struct :: proc(p: ^Type_Struct, name: string, types: Type_List, config: Config) {
+	if align, has_align := config.struct_align[name]; has_align {
+		p.align = align
+	}
+
 	for &f in p.fields {
 		if len(f.names) != 1 {
 			continue
@@ -501,6 +517,12 @@ override_struct :: proc(p: ^Type_Struct, name: string, types: Type_List, config:
 				f.is_using = true
 			} else {
 				f.type = Fixed_Value(override)
+			}
+		}
+
+		for &fname in f.names {
+			if new_name, rename := config.rename[fmt.tprintf("%s.%s", name, fname)]; rename {
+				fname = new_name
 			}
 		}
 

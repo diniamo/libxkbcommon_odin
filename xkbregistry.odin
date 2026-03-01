@@ -123,7 +123,7 @@ Rxkb_Context_Flag :: enum u32 {
 /**
 * Flags for context creation.
 */
-Rxkb_Context_Flags :: bit_set[Rxkb_Context_Flag; i32]
+Rxkb_Context_Flags :: bit_set[Rxkb_Context_Flag; u32]
 
 @(default_calling_convention="c", link_prefix="xkb_")
 foreign lib {

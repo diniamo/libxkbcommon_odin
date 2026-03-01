@@ -18,25 +18,28 @@ struct_field_overrides = {}
 struct_field_tags = {}
 remove_enum_members = [ "*NO_FLAGS" ]
 remove_enum_member_prefix = {
-    "xkb_context_flags" = "XKB_CONTEXT_",
-    "xkb_compose_compile_flags" = "XKB_COMPOSE_COMPILE_",
-    "xkb_compose_format" = "XKB_COMPOSE_FORMAT_",
-    "xkb_keymap_compile_flags" = "XKB_KEYMAP_COMPILE_",
-    "xkb_keysym_flags" = "XKB_KEYSYM_",
+    "xkb_context_flags" = "XKB_CONTEXT_"
+    "xkb_compose_compile_flags" = "XKB_COMPOSE_COMPILE_"
+    "xkb_compose_format" = "XKB_COMPOSE_FORMAT_"
+    "xkb_keymap_compile_flags" = "XKB_KEYMAP_COMPILE_"
+    "xkb_keysym_flags" = "XKB_KEYSYM_"
     "xkb_rmlvo_builder_flags" = "XKB_RMLVO_BUILDER_"
 }
 bit_setify = {
-    "xkb_context_flags" = "Context_Flag",
-    "xkb_compose_compile_flags" = "Compose_Compile_Flag",
+    "xkb_context_flags" = "Context_Flag"
+    "xkb_compose_compile_flags" = "Compose_Compile_Flag"
     "xkb_keymap_compile_flags" = "Keymap_Compile_Flag"
     "xkb_keymap_serialize_flags" = "Keymap_Serialize_Flag"
-    "xkb_keysym_flags" = "Keysym_Flag",
-    "xkb_rmlvo_builder_flags" = "Rmlvo_Builder_Flag",
-    "xkb_state_component" = "State_Component_Bit",
+    "xkb_keysym_flags" = "Keysym_Flag"
+    "xkb_rmlvo_builder_flags" = "Rmlvo_Builder_Flag"
+    "xkb_state_component" = "State_Component_Bit"
     "rxkb_context_flags" = "Rxkb_Context_Flag"
 }
 procedure_type_overrides = {}
 procedure_parameter_defaults = {}
 remove = []
-clang_include_paths = [ "headers" ]
+clang_include_paths = [
+	"headers"
+	"/usr/lib/clang/21/include/"
+]
 clang_defines = {}

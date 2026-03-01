@@ -31,7 +31,7 @@ Compose_Compile_Flag :: enum u32 {
 }
 
 /** Flags affecting Compose file compilation. */
-Compose_Compile_Flags :: bit_set[Compose_Compile_Flag; i32]
+Compose_Compile_Flags :: bit_set[Compose_Compile_Flag; u32]
 
 /** The recognized Compose file formats. */
 Compose_Format :: enum u32 {
